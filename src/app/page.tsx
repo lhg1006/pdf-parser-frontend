@@ -115,7 +115,9 @@ export default function Home() {
     formData.append("boxes", JSON.stringify(mainBoxes));
   
     try {
-      const response = await axios.post("http://localhost:8100/api/registration/extract/pdf/text", formData, {
+      // 백엔드 URL 변경
+      const url = "http://localhost:8080/api/pdf/text"
+      const response = await axios.post(url, formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
 
