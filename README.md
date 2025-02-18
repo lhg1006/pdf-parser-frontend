@@ -1,4 +1,5 @@
 # PDF Parser Frontend
+# Backend 로직 추가 필요함!!!
 
 PDF 문서에서 특정 영역의 텍스트를 추출하는 웹 애플리케이션입니다.
 
