@@ -1,10 +1,39 @@
 import { ButtonStyle } from '@/styles/buttonStyles';
+import { useState } from 'react';
 
 interface ParsedTextProps {
   text: string;
 }
 
 export default function ParsedText({ text }: ParsedTextProps) {
+  const [copyStatus, setCopyStatus] = useState<'idle' | 'copied'>('idle');
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopyStatus('copied');
+      setTimeout(() => setCopyStatus('idle'), 2000);
+    } catch (err) {
+      console.error('복사 중 오류가 발생했습니다:', err);
+      // 대체 복사 방법 시도
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.left = '-9999px';
+      document.body.appendChild(textarea);
+      textarea.select();
+      try {
+        document.execCommand('copy');
+        setCopyStatus('copied');
+        setTimeout(() => setCopyStatus('idle'), 2000);
+      } catch (err) {
+        console.error('대체 복사 방법도 실패했습니다:', err);
+      } finally {
+        document.body.removeChild(textarea);
+      }
+    }
+  };
+
   return (
     <section style={{
       backgroundColor: '#f5f5f5',
@@ -105,16 +134,16 @@ export default function ParsedText({ text }: ParsedTextProps) {
           justifyContent: 'flex-end'
         }}>
           <button
-            onClick={() => {
-              navigator.clipboard.writeText(text);
-            }}
+            onClick={handleCopy}
             style={{
               ...ButtonStyle,
               display: 'flex',
               alignItems: 'center',
               gap: '6px',
               fontSize: '13px',
-              padding: '6px 12px'
+              padding: '6px 12px',
+              backgroundColor: copyStatus === 'copied' ? '#34d399' : ButtonStyle.backgroundColor,
+              transition: 'background-color 0.2s ease'
             }}
           >
             <svg 
@@ -127,10 +156,16 @@ export default function ParsedText({ text }: ParsedTextProps) {
               strokeLinecap="round" 
               strokeLinejoin="round"
             >
-              <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
-              <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
+              {copyStatus === 'copied' ? (
+                <path d="M20 6L9 17l-5-5" />
+              ) : (
+                <>
+                  <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
+                  <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
+                </>
+              )}
             </svg>
-            복사하기
+            {copyStatus === 'copied' ? '복사됨' : '복사하기'}
           </button>
         </div>
       )}

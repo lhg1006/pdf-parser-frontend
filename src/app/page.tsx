@@ -447,9 +447,7 @@ export default function Home() {
       const response = await axios.post(url, formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
-
-      console.log('서버 응답:', response.data);
-
+      
       let formattedText = '';
       
       if (Array.isArray(response.data)) {
