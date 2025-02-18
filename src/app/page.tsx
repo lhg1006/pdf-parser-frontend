@@ -20,6 +20,157 @@ type BoxState = {
 // PDF.js 워커 설정
 pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
 
+// 스타일 정의
+const controlPanelStyles = {
+  container: {
+    padding: '16px',
+    backgroundColor: '#f5f5f5',
+    borderRadius: '8px',
+    marginBottom: '16px'
+  },
+  mainBox: {
+    marginBottom: '16px',
+    padding: '12px',
+    backgroundColor: '#fff',
+    borderRadius: '6px',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+  },
+  subBox: {
+    marginLeft: '20px',
+    marginTop: '8px',
+    padding: '8px',
+    backgroundColor: '#f8f8f8',
+    borderRadius: '4px',
+    border: '1px solid #eee'
+  },
+  button: {
+    ...ActionButtonStyle,
+    padding: '6px 12px',
+    fontSize: '14px',
+    marginRight: '8px'
+  },
+  boxHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '8px'
+  },
+  boxTitle: {
+    fontWeight: 'bold',
+    fontSize: '14px'
+  }
+};
+
+// BoxControlPanel 컴포넌트
+const BoxControlPanel = ({ 
+  boxes, 
+  pageNumber,
+  onAddMainBox,
+  onAddSubBox,
+  onRemoveBox,
+  onSubmit
+}: {
+  boxes: BoxState;
+  pageNumber: number;
+  onAddMainBox: () => void;
+  onAddSubBox: (parentId: string, parentIndex: number, targetPage: number) => void;
+  onRemoveBox: (id: string) => void;
+  onSubmit: () => void;
+}) => {
+  // 모든 페이지의 메인박스를 가져와서 정렬
+  const allMainBoxes = Object.entries(boxes)
+    .flatMap(([pageNum, pageBoxes]) => 
+      pageBoxes
+        .filter(box => box.isMain)
+        .map(box => ({
+          ...box,
+          pageNum: parseInt(pageNum)
+        }))
+    )
+    .sort((a, b) => a.boxIndex - b.boxIndex);
+
+  return (
+    <div style={controlPanelStyles.container}>
+      <div style={{ 
+        display: 'flex',
+        gap: '12px',
+        marginBottom: '16px'
+      }}>
+        <button 
+          onClick={onAddMainBox}
+          style={ActionButtonStyle}
+        >
+          + 메인박스 추가
+        </button>
+        <button 
+          onClick={onSubmit}
+          disabled={Object.keys(boxes).length === 0}
+          style={{
+            ...ActionButtonStyle,
+            opacity: Object.keys(boxes).length === 0 ? 0.5 : 1
+          }}
+        >
+          선택 영역 파싱
+        </button>
+      </div>
+
+      {allMainBoxes.map(mainBox => {
+        // 해당 메인박스의 모든 서브박스 찾기
+        const subBoxes = Object.entries(boxes)
+          .flatMap(([pageNum, pageBoxes]) =>
+            pageBoxes
+              .filter(box => box.parentId === mainBox.id)
+              .map(box => ({
+                ...box,
+                pageNum: parseInt(pageNum)
+              }))
+          )
+          .sort((a, b) => a.boxIndex - b.boxIndex);
+
+        return (
+          <div key={mainBox.id} style={controlPanelStyles.mainBox}>
+            <div style={controlPanelStyles.boxHeader}>
+              <span style={controlPanelStyles.boxTitle}>
+                메인박스 {mainBox.boxIndex}번 (페이지 {mainBox.pageNum})
+              </span>
+              <div>
+                <button
+                  onClick={() => onAddSubBox(mainBox.id, mainBox.boxIndex, pageNumber)}
+                  style={controlPanelStyles.button}
+                >
+                  + 서브박스
+                </button>
+                <button
+                  onClick={() => onRemoveBox(mainBox.id)}
+                  style={{...controlPanelStyles.button, backgroundColor: '#ff4444'}}
+                >
+                  삭제
+                </button>
+              </div>
+            </div>
+            
+            {subBoxes.map(subBox => (
+              <div key={subBox.id} style={controlPanelStyles.subBox}>
+                <div style={controlPanelStyles.boxHeader}>
+                  <span style={controlPanelStyles.boxTitle}>
+                    서브박스 {mainBox.boxIndex}-{subBox.boxIndex}번 (페이지 {subBox.pageNum})
+                  </span>
+                  <button
+                    onClick={() => onRemoveBox(subBox.id)}
+                    style={{...controlPanelStyles.button, backgroundColor: '#ff4444'}}
+                  >
+                    삭제
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
   const [fileUrl, setFileUrl] = useState<string | null>(null);
@@ -72,7 +223,7 @@ export default function Home() {
     setMainBoxCount((prev: number) => prev + 1);
   };
 
-  const addSubBox = (parentId: string, parentIndex: number) => {
+  const addSubBox = (parentId: string, parentIndex: number, targetPage: number) => {
     const allBoxes = Object.values(boxes).flat();
     const subBoxCount = allBoxes.filter((box: Box) => box.parentId === parentId).length;
     
@@ -89,7 +240,7 @@ export default function Home() {
 
     setBoxes((prev: BoxState) => ({
       ...prev,
-      [pageNumber]: [...(prev[pageNumber] || []), newSubBox]
+      [targetPage]: [...(prev[targetPage] || []), newSubBox]
     }));
   };
 
@@ -141,7 +292,7 @@ export default function Home() {
     ).sort((a, b) => a.boxIndex - b.boxIndex);
 
     const processedBoxes = allMainBoxes.map(mainBox => {
-      // 해당 메인박스의 모든 서브박스 찾기
+      // 해당 메인박스의 모든 서브박스 찾기 (각 서브박스의 실제 페이지 번호 유지)
       const subBoxes = Object.entries(boxes).flatMap(([pageNum, pageBoxes]) =>
         pageBoxes
           .filter(box => box.parentId === mainBox.id)
@@ -149,7 +300,7 @@ export default function Home() {
             ...calculateActualCoordinates(subBox),
             id: subBox.id,
             boxIndex: subBox.boxIndex,
-            pageNumber: parseInt(pageNum) - 1
+            pageNumber: parseInt(pageNum) - 1  // 서브박스의 실제 페이지 번호 사용
           }))
       ).sort((a, b) => a.boxIndex - b.boxIndex);
 
@@ -177,21 +328,23 @@ export default function Home() {
       let formattedText = '';
       
       if (Array.isArray(response.data)) {
-        processedBoxes.forEach((mainBox, index) => {
-          if (response.data[index]) {
-            formattedText += `메인박스 ${mainBox.boxIndex}번:\n${response.data[index]}\n\n`;
+        let responseIndex = 0;
+        processedBoxes.forEach((mainBox) => {
+          if (response.data[responseIndex]) {
+            formattedText += `메인박스 ${mainBox.boxIndex}번 (페이지 ${mainBox.pageNumber + 1}):\n${response.data[responseIndex]}\n\n`;
+            responseIndex++;
             
-            mainBox.subBoxes.forEach((subBox, subIndex) => {
-              const subBoxResponse = response.data[index + subIndex + 1];
-              if (subBoxResponse) {
-                formattedText += `서브박스 ${mainBox.boxIndex}-${subBox.boxIndex}번:\n${subBoxResponse}\n\n`;
+            mainBox.subBoxes.forEach((subBox) => {
+              if (response.data[responseIndex]) {
+                formattedText += `서브박스 ${mainBox.boxIndex}-${subBox.boxIndex}번 (페이지 ${subBox.pageNumber + 1}):\n${response.data[responseIndex]}\n\n`;
+                responseIndex++;
               }
             });
           }
         });
       } else {
         processedBoxes.forEach(mainBox => {
-          formattedText += `메인박스 ${mainBox.boxIndex}번:\n`;
+          formattedText += `메인박스 ${mainBox.boxIndex}번 (페이지 ${mainBox.pageNumber + 1}):\n`;
           if (response.data[mainBox.id]) {
             formattedText += `${response.data[mainBox.id]}\n`;
           } else if (response.data.results?.[mainBox.id]) {
@@ -200,7 +353,7 @@ export default function Home() {
           formattedText += '\n';
 
           mainBox.subBoxes.forEach(subBox => {
-            formattedText += `서브박스 ${mainBox.boxIndex}-${subBox.boxIndex}번:\n`;
+            formattedText += `서브박스 ${mainBox.boxIndex}-${subBox.boxIndex}번 (페이지 ${subBox.pageNumber + 1}):\n`;
             if (response.data[subBox.id]) {
               formattedText += `${response.data[subBox.id]}\n`;
             } else if (response.data.results?.[subBox.id]) {
@@ -268,7 +421,6 @@ export default function Home() {
     }}>
       <Header 
         onFileChange={handleFileChange}
-        onAddMainBox={addMainBox}
       />
 
       <main style={{
@@ -285,6 +437,7 @@ export default function Home() {
             numPages={numPages}
             scale={scale}
             boxes={boxes[pageNumber] || []}
+            allBoxes={boxes}
             pageSize={pageSize}
             onDocumentLoadSuccess={onDocumentLoadSuccess}
             onPageLoadSuccess={onPageLoadSuccess}
@@ -292,28 +445,22 @@ export default function Home() {
             onPageChange={changePage}
             onGoToPage={goToPage}
             onBoxUpdate={(updatedBoxes) => setBoxes(prev => ({ ...prev, [pageNumber]: updatedBoxes }))}
-            onAddSubBox={addSubBox}
+            onAddSubBox={(parentId, parentIndex) => addSubBox(parentId, parentIndex, pageNumber)}
             onRemoveBox={removeBox}
           />
-          
-          <div style={{
-            display: 'flex',
-            justifyContent: 'flex-end'
-          }}>
-            <button 
-              onClick={handleSubmit} 
-              disabled={Object.keys(boxes).length === 0}
-              style={{
-                ...ActionButtonStyle,
-                opacity: Object.keys(boxes).length === 0 ? 0.5 : 1
-              }}
-            >
-              선택 영역 파싱
-            </button>
-          </div>
         </section>
 
-        <ParsedText text={text} />
+        <section>
+          <BoxControlPanel
+            boxes={boxes}
+            pageNumber={pageNumber}
+            onAddMainBox={addMainBox}
+            onAddSubBox={addSubBox}
+            onRemoveBox={removeBox}
+            onSubmit={handleSubmit}
+          />
+          <ParsedText text={text} />
+        </section>
       </main>
 
       <Footer />

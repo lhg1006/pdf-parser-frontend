@@ -1,9 +1,14 @@
 import { Rnd } from 'react-rnd';
 import { Box } from '@/types/box';
 
+type BoxState = {
+  [pageNumber: number]: Box[];
+};
+
 interface SelectionBoxProps {
   box: Box;
   boxes: Box[];
+  allBoxes: BoxState;
   pageSize: { width: number; height: number };
   onBoxUpdate: (boxes: Box[]) => void;
   onAddSubBox: (parentId: string, parentIndex: number) => void;
@@ -13,11 +18,21 @@ interface SelectionBoxProps {
 export default function SelectionBox({
   box,
   boxes,
+  allBoxes,
   pageSize,
   onBoxUpdate,
   onAddSubBox,
   onRemoveBox
 }: SelectionBoxProps) {
+  // 모든 페이지에서 메인박스 찾기
+  const findMainBox = (parentId: string) => {
+    for (const pageBoxes of Object.values(allBoxes)) {
+      const mainBox = pageBoxes.find(b => b.id === parentId);
+      if (mainBox) return mainBox;
+    }
+    return undefined;
+  };
+
   return (
     <Rnd
       style={{
@@ -117,7 +132,7 @@ export default function SelectionBox({
       }}>
         {box.isMain 
           ? box.boxIndex 
-          : `${boxes.find(b => b.id === box.parentId)?.boxIndex}-${box.boxIndex}`
+          : `${findMainBox(box.parentId!)?.boxIndex}-${box.boxIndex}`
         }
       </div>
     </Rnd>

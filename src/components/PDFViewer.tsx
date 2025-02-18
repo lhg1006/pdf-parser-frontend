@@ -2,6 +2,7 @@ import { Document, Page } from 'react-pdf';
 import { ButtonStyle } from '@/styles/buttonStyles';
 import SelectionBox from './SelectionBox';
 import { Box } from '@/types/box';
+import { BoxState } from '@/types/boxState';
 
 interface PDFViewerProps {
   fileUrl: string | null;
@@ -9,6 +10,7 @@ interface PDFViewerProps {
   numPages: number | null;
   scale: number;
   boxes: Box[];
+  allBoxes: BoxState;
   pageSize: { width: number; height: number };
   onDocumentLoadSuccess: ({ numPages }: { numPages: number }) => void;
   onPageLoadSuccess: (page: any) => void;
@@ -16,7 +18,7 @@ interface PDFViewerProps {
   onPageChange: (offset: number) => void;
   onGoToPage: (event: React.ChangeEvent<HTMLInputElement>) => void;
   onBoxUpdate: (boxes: Box[]) => void;
-  onAddSubBox: (parentId: string, parentIndex: number) => void;
+  onAddSubBox: (parentId: string, parentIndex: number, targetPage: number) => void;
   onRemoveBox: (id: string) => void;
 }
 
@@ -26,6 +28,7 @@ export default function PDFViewer({
   numPages,
   scale,
   boxes,
+  allBoxes,
   pageSize,
   onDocumentLoadSuccess,
   onPageLoadSuccess,
@@ -143,9 +146,10 @@ export default function PDFViewer({
                   key={box.id}
                   box={box}
                   boxes={boxes}
+                  allBoxes={allBoxes}
                   pageSize={pageSize}
                   onBoxUpdate={onBoxUpdate}
-                  onAddSubBox={onAddSubBox}
+                  onAddSubBox={(parentId, parentIndex) => onAddSubBox(parentId, parentIndex, pageNumber)}
                   onRemoveBox={onRemoveBox}
                 />
               ))}

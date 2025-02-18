@@ -2,10 +2,9 @@ import { ActionButtonStyle } from '@/styles/buttonStyles';
 
 interface HeaderProps {
   onFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  onAddMainBox: () => void;
 }
 
-export default function Header({ onFileChange, onAddMainBox }: HeaderProps) {
+export default function Header({ onFileChange }: HeaderProps) {
   return (
     <header style={{
       marginBottom: '24px',
@@ -34,17 +33,6 @@ export default function Header({ onFileChange, onAddMainBox }: HeaderProps) {
             flex: '1'
           }}
         />
-        <button 
-          onClick={onAddMainBox}
-          style={{
-            ...ActionButtonStyle,
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px'
-          }}
-        >
-          <span>+</span> 메인 박스 추가
-        </button>
       </div>
     </header>
   );
