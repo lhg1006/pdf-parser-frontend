@@ -13,8 +13,9 @@ import { ActionButtonStyle } from '@/styles/buttonStyles';
 import Footer from '@/components/Footer';
 
 // 타입 정의 추가
-type BoxState = Box[];
-type SetBoxesFunction = React.Dispatch<React.SetStateAction<BoxState>>;
+type BoxState = {
+  [pageNumber: number]: Box[];
+};
 
 // PDF.js 워커 설정
 pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
@@ -28,7 +29,7 @@ export default function Home() {
   const [scale, setScale] = useState(1.0);
   const [pageSize, setPageSize] = useState({ width: 0, height: 0 });
   const [pdfDimensions, setPdfDimensions] = useState({ width: 0, height: 0 });
-  const [boxes, setBoxes] = useState<BoxState>([]);
+  const [boxes, setBoxes] = useState<BoxState>({});
   const [mainBoxCount, setMainBoxCount] = useState(0);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -38,7 +39,7 @@ export default function Home() {
       const url = URL.createObjectURL(selectedFile);
       setFileUrl(url);
       setPageNumber(1);
-      setBoxes([]);
+      setBoxes({});
       setMainBoxCount(0);
     }
   };
@@ -63,12 +64,18 @@ export default function Home() {
       height: 100,
       isMain: true
     };
-    setBoxes((prev: BoxState) => [...prev, newMainBox]);
+    
+    setBoxes((prev: BoxState) => ({
+      ...prev,
+      [pageNumber]: [...(prev[pageNumber] || []), newMainBox]
+    }));
     setMainBoxCount((prev: number) => prev + 1);
   };
 
   const addSubBox = (parentId: string, parentIndex: number) => {
-    const subBoxCount = boxes.filter((box: Box) => box.parentId === parentId).length;
+    const allBoxes = Object.values(boxes).flat();
+    const subBoxCount = allBoxes.filter((box: Box) => box.parentId === parentId).length;
+    
     const newSubBox: Box = {
       id: Date.now().toString(),
       boxIndex: subBoxCount + 1,
@@ -79,47 +86,87 @@ export default function Home() {
       isMain: false,
       parentId
     };
-    setBoxes((prev: BoxState) => [...prev, newSubBox]);
+
+    setBoxes((prev: BoxState) => ({
+      ...prev,
+      [pageNumber]: [...(prev[pageNumber] || []), newSubBox]
+    }));
   };
 
   const removeBox = (id: string) => {
     setBoxes((prev: BoxState) => {
-      const box = prev.find((b: Box) => b.id === id);
+      const newBoxes = { ...prev };
+      const currentPageBoxes = newBoxes[pageNumber] || [];
+      const box = currentPageBoxes.find((b: Box) => b.id === id);
+      
       if (box?.isMain) {
-        return prev.filter((b: Box) => b.id !== id && b.parentId !== id);
+        // 메인 박스와 관련된 서브 박스들도 모두 제거
+        newBoxes[pageNumber] = currentPageBoxes.filter((b: Box) => b.id !== id && b.parentId !== id);
+
+        // 메인 박스가 제거된 경우에만 인덱스 재조정
+        let mainBoxIndex = 1;
+        Object.keys(newBoxes).forEach((page) => {
+          const pageNum = parseInt(page);
+          newBoxes[pageNum] = newBoxes[pageNum].map((b: Box) => {
+            if (b.isMain) {
+              return { ...b, boxIndex: mainBoxIndex++ };
+            }
+            return b;
+          });
+        });
+
+        // 메인 박스 카운트 업데이트
+        setMainBoxCount((prev) => {
+          const allMainBoxes = Object.values(newBoxes).flat().filter(b => b.isMain);
+          return allMainBoxes.length;
+        });
+      } else {
+        // 서브 박스만 제거
+        newBoxes[pageNumber] = currentPageBoxes.filter((b: Box) => b.id !== id);
       }
-      return prev.filter((b: Box) => b.id !== id);
+
+      return newBoxes;
     });
   };
 
   const handleSubmit = async () => {
-    if (!file || boxes.length === 0) return;
+    if (!file || Object.keys(boxes).length === 0) return;
   
-    const mainBoxes = boxes.filter(box => box.isMain).map(mainBox => {
-      const subBoxes = boxes
-        .filter(box => box.parentId === mainBox.id)
-        .map(subBox => ({
-          ...calculateActualCoordinates(subBox),
-          id: subBox.id,
-          boxIndex: subBox.boxIndex,
-          pageNumber: pageNumber - 1
-        }));
-  
+    // 모든 메인박스와 서브박스를 통합하여 처리
+    const allMainBoxes = Object.entries(boxes).flatMap(([pageNum, pageBoxes]) => 
+      pageBoxes.filter(box => box.isMain).map(box => ({
+        ...box,
+        pageNumber: parseInt(pageNum) - 1
+      }))
+    ).sort((a, b) => a.boxIndex - b.boxIndex);
+
+    const processedBoxes = allMainBoxes.map(mainBox => {
+      // 해당 메인박스의 모든 서브박스 찾기
+      const subBoxes = Object.entries(boxes).flatMap(([pageNum, pageBoxes]) =>
+        pageBoxes
+          .filter(box => box.parentId === mainBox.id)
+          .map(subBox => ({
+            ...calculateActualCoordinates(subBox),
+            id: subBox.id,
+            boxIndex: subBox.boxIndex,
+            pageNumber: parseInt(pageNum) - 1
+          }))
+      ).sort((a, b) => a.boxIndex - b.boxIndex);
+
       return {
         ...calculateActualCoordinates(mainBox),
         id: mainBox.id,
         boxIndex: mainBox.boxIndex,
-        pageNumber: pageNumber - 1,
+        pageNumber: mainBox.pageNumber,
         subBoxes
       };
     });
   
     const formData = new FormData();
     formData.append("file", file);
-    formData.append("boxes", JSON.stringify(mainBoxes));
+    formData.append("boxes", JSON.stringify(processedBoxes));
   
     try {
-      // 백엔드 URL 변경
       const url = `${process.env.NEXT_PUBLIC_API_URL}${process.env.NEXT_PUBLIC_API_PATH}`
       const response = await axios.post(url, formData, {
         headers: { "Content-Type": "multipart/form-data" },
@@ -130,17 +177,20 @@ export default function Home() {
       let formattedText = '';
       
       if (Array.isArray(response.data)) {
-        response.data.forEach((text, index) => {
-          const box = boxes[index];
-          if (box) {
-            const prefix = box.isMain 
-              ? `메인박스 ${box.boxIndex}번`
-              : `서브박스 ${boxes.find(b => b.id === box.parentId)?.boxIndex}-${box.boxIndex}번`;
-            formattedText += `${prefix}:\n${text}\n\n`;
+        processedBoxes.forEach((mainBox, index) => {
+          if (response.data[index]) {
+            formattedText += `메인박스 ${mainBox.boxIndex}번:\n${response.data[index]}\n\n`;
+            
+            mainBox.subBoxes.forEach((subBox, subIndex) => {
+              const subBoxResponse = response.data[index + subIndex + 1];
+              if (subBoxResponse) {
+                formattedText += `서브박스 ${mainBox.boxIndex}-${subBox.boxIndex}번:\n${subBoxResponse}\n\n`;
+              }
+            });
           }
         });
       } else {
-        mainBoxes.forEach(mainBox => {
+        processedBoxes.forEach(mainBox => {
           formattedText += `메인박스 ${mainBox.boxIndex}번:\n`;
           if (response.data[mainBox.id]) {
             formattedText += `${response.data[mainBox.id]}\n`;
@@ -234,14 +284,14 @@ export default function Home() {
             pageNumber={pageNumber}
             numPages={numPages}
             scale={scale}
-            boxes={boxes}
+            boxes={boxes[pageNumber] || []}
             pageSize={pageSize}
             onDocumentLoadSuccess={onDocumentLoadSuccess}
             onPageLoadSuccess={onPageLoadSuccess}
             onScaleChange={setScale}
             onPageChange={changePage}
             onGoToPage={goToPage}
-            onBoxUpdate={setBoxes}
+            onBoxUpdate={(updatedBoxes) => setBoxes(prev => ({ ...prev, [pageNumber]: updatedBoxes }))}
             onAddSubBox={addSubBox}
             onRemoveBox={removeBox}
           />
@@ -252,10 +302,10 @@ export default function Home() {
           }}>
             <button 
               onClick={handleSubmit} 
-              disabled={boxes.length === 0}
+              disabled={Object.keys(boxes).length === 0}
               style={{
                 ...ActionButtonStyle,
-                opacity: boxes.length === 0 ? 0.5 : 1
+                opacity: Object.keys(boxes).length === 0 ? 0.5 : 1
               }}
             >
               선택 영역 파싱
