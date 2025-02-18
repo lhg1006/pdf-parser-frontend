@@ -12,6 +12,10 @@ import { Box } from '@/types/box';
 import { ActionButtonStyle } from '@/styles/buttonStyles';
 import Footer from '@/components/Footer';
 
+// 타입 정의 추가
+type BoxState = Box[];
+type SetBoxesFunction = React.Dispatch<React.SetStateAction<BoxState>>;
+
 // PDF.js 워커 설정
 pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
 
@@ -24,7 +28,7 @@ export default function Home() {
   const [scale, setScale] = useState(1.0);
   const [pageSize, setPageSize] = useState({ width: 0, height: 0 });
   const [pdfDimensions, setPdfDimensions] = useState({ width: 0, height: 0 });
-  const [boxes, setBoxes] = useState<Box[]>([]);
+  const [boxes, setBoxes] = useState<BoxState>([]);
   const [mainBoxCount, setMainBoxCount] = useState(0);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -59,12 +63,12 @@ export default function Home() {
       height: 100,
       isMain: true
     };
-    setBoxes(prev => [...prev, newMainBox]);
-    setMainBoxCount(prev => prev + 1);
+    setBoxes((prev: BoxState) => [...prev, newMainBox]);
+    setMainBoxCount((prev: number) => prev + 1);
   };
 
   const addSubBox = (parentId: string, parentIndex: number) => {
-    const subBoxCount = boxes.filter(box => box.parentId === parentId).length;
+    const subBoxCount = boxes.filter((box: Box) => box.parentId === parentId).length;
     const newSubBox: Box = {
       id: Date.now().toString(),
       boxIndex: subBoxCount + 1,
@@ -75,16 +79,16 @@ export default function Home() {
       isMain: false,
       parentId
     };
-    setBoxes(prev => [...prev, newSubBox]);
+    setBoxes((prev: BoxState) => [...prev, newSubBox]);
   };
 
   const removeBox = (id: string) => {
-    setBoxes(prev => {
-      const box = prev.find(b => b.id === id);
+    setBoxes((prev: BoxState) => {
+      const box = prev.find((b: Box) => b.id === id);
       if (box?.isMain) {
-        return prev.filter(b => b.id !== id && b.parentId !== id);
+        return prev.filter((b: Box) => b.id !== id && b.parentId !== id);
       }
-      return prev.filter(b => b.id !== id);
+      return prev.filter((b: Box) => b.id !== id);
     });
   };
 
@@ -116,7 +120,7 @@ export default function Home() {
   
     try {
       // 백엔드 URL 변경
-      const url = "http://localhost:8080/api/pdf/text"
+      const url = `${process.env.NEXT_PUBLIC_API_URL}${process.env.NEXT_PUBLIC_API_PATH}`
       const response = await axios.post(url, formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
